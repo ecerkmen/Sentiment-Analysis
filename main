@@ -1,0 +1,223 @@
+# Importing necessary libraries
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+import string
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.svm import LinearSVC
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import roc_curve, auc
+
+import warnings # Filtering warnings
+warnings.filterwarnings("ignore")
+
+# Uploading the dataset
+
+df = pd.read_csv(r"C:\Users\90534\Desktop\Twitter_Data.csv")
+
+# Displaying the first few rows of the dataset
+
+df.head()
+
+# Visualising how labels are distributed
+
+sns.countplot(x = "label", data = df)
+plt.title("Labels")
+plt.show()
+
+# Displaying sample tweets
+
+print("Sample tweets:")
+for i in range(5):
+    print(df["text"][i])
+
+# Checking if there are missing values in the dataset
+
+df.isnull().sum()
+
+# Data preprocessing
+
+df = df.dropna(subset = ["text", "label"]) # Dropping rows with missing text or label
+
+df["text"] = df["text"].str.lower() # Converting text to lowercase
+
+def remove_punct(text): # Defining a function to remove punctuation
+    return text.translate(str.maketrans("", "", string.punctuation))
+
+df["text"] = df["text"].apply(remove_punct)
+df["text"] = df["text"].apply(word_tokenize)
+
+stop_words = set(stopwords.words("english"))
+df["text"] = df["text"].apply(lambda tokens: [word for word in tokens if word not in stop_words])
+
+# Checking if there are any missing values left
+
+df.isnull().sum()
+
+# Visualising the distribution of tweet lengths
+
+df["tweet_length"] = df["text"].apply(len)
+plt.figure(figsize = (10, 6))
+sns.histplot(df["tweet_length"], bins = 30)
+plt.title("Tweet Lengths")
+plt.xlabel("Length")
+plt.show()
+
+# Preparing data for modeling
+
+X = df["text"]
+y = df["label"]
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 42) #Splitting the dataset into train and test
+
+# Joining tokens back into text
+
+X_train = [" ".join(tokens) for tokens in X_train] 
+X_test = [" ".join(tokens) for tokens in X_test]
+
+# TF-IDF Vectorisation
+
+tfidf_vectorizer = TfidfVectorizer(max_features = 5000)
+X_train_tfidf = tfidf_vectorizer.fit_transform(X_train)
+X_test_tfidf = tfidf_vectorizer.transform(X_test)
+
+# Linear SVM Model
+
+svm_classifier = LinearSVC()
+svm_classifier.fit(X_train_tfidf, y_train)
+
+# Predictions and evaluation for Linear SVM
+
+y_pred_svm = svm_classifier.predict(X_test_tfidf)
+accuracy_svm = accuracy_score(y_test, y_pred)
+report_svm = classification_report(y_test, y_pred)
+
+print("Linear SVM Results:")
+print(f"Accuracy: {accuracy_svm}")
+print("Classification Report:")
+print(report_svm)
+
+# Multinomial Naive Bayes Model
+
+mnb_classifier = MultinomialNB()
+mnb_classifier.fit(X_train_tfidf, y_train)
+
+# Predictions and evaluation for Multinomial Naive Bayes
+
+y_pred_mnb = mnb_classifier.predict(X_test_tfidf)
+accuracy_mnb = accuracy_score(y_test, y_pred_mnb)
+report_mnb = classification_report(y_test, y_pred_mnb)
+
+print("Multinomial Naive Bayes Results:")
+print(f"Accuracy: {accuracy_mnb}")
+print("Classification Report:")
+print(report_mnb)
+
+# Logistic Regression Model
+
+lr_classifier = LogisticRegression()
+lr_classifier.fit(X_train_tfidf, y_train)
+
+# Predictions and evaluation for Linear Regression Model
+
+y_pred_lr = lr_classifier.predict(X_test_tfidf)
+accuracy_lr = accuracy_score(y_test, y_pred_lr)
+report_lr = classification_report(y_test, y_pred_lr)
+
+print("Logistic Regression Results:")
+print(f"Accuracy: {accuracy_lr}")
+print("Classification Report:")
+print(report_lr)
+
+#ROC Curves and AUC Analysis for Linear SVM Model
+
+y_probs_svm = svm_classifier.decision_function(X_test_tfidf)
+
+plt.figure(figsize = (8, 6))
+fpr = dict()
+tpr = dict()
+roc_auc = dict()
+
+n_classes = len(svm_classifier.classes_)
+
+for i in range(n_classes):
+    fpr[i], tpr[i], _ = roc_curve(y_test == i, y_probs_svm[:, i])
+    roc_auc[i] = auc(fpr[i], tpr[i])
+    plt.plot(fpr[i], tpr[i], label = f"ROC Curve (Class {i}, AUC = {roc_auc[i]:.2f})")
+    
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("ROC Curves for Linear SVM (Multiclass)")
+plt.legend(loc = "best")
+plt.show()
+
+# ROC Curves and AUC Analysis for Multinomial Naive Bayes Model
+
+y_probs_mnb = mnb_classifier.predict_proba(X_test_tfidf)
+
+plt.figure(figsize = (8, 6))
+fpr = dict()
+tpr = dict()
+roc_auc = dict()
+
+n_classes = len(mnb_classifier.classes_)
+
+for i in range(n_classes):
+    fpr[i], tpr[i], _ = roc_curve(y_test == i, y_probs_mnb[:, i])
+    roc_auc[i] = auc(fpr[i], tpr[i])
+    plt.plot(fpr[i], tpr[i], label = f"ROC Curve (Class {i}, AUC = {roc_auc[i]:.2f})")
+    
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("ROC Curves for Multinomial Naive Bayes (Multiclass)")
+plt.legend(loc = "best")
+plt.show()
+
+# ROC Curves and AUC Analysis for Logistic Regression
+
+y_probs_lr = lr_classifier.predict_proba(X_test_tfidf)
+
+plt.figure(figsize = (8, 6))
+fpr = dict()
+tpr = dict()
+roc_auc = dict()
+
+n_classes = len(lr_classifier.classes_)
+
+for i in range(n_classes):
+    fpr[i], tpr[i], _ = roc_curve(y_test == i, y_probs_lr[:, i])
+    roc_auc[i] = auc(fpr[i], tpr[i])
+    plt.plot(fpr[i], tpr[i], label = f"ROC Curve (Class {i}, AUC = {roc_auc[i]:.2f})")
+    
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("ROC Curves for Logistic Regression (Multiclass)")
+plt.legend(loc = "best")
+plt.show()
+
+# Sentiment prediction for sample text
+
+sample_text = ["I couldn't love this film more.", "Smoking makes my head ache."]
+
+sample_text_cleaned = [remove_punct(text.lower()) for text in sample_text]
+
+sample_text_tfidf = tfidf_vectorizer.transform(sample_text_cleaned)
+
+predictions_svm = svm_classifier.predict(sample_text_tfidf)
+predictions_mnb = mnb_classifier.predict(sample_text_tfidf)
+predictions_lr = lr_classifier.predict(sample_text_tfidf)
+
+# Display predictions for new text
+
+for text, svm_pred, mnb_pred, lr_pred in zip(sample_text, predictions_svm, predictions_mnb, predictions_lr):
+    print(f"Text: {text}")
+    print(f"Linear SVM Predicted Sentiment: {svm_pred}")
+    print(f"Multinomial Naive Bayes Predicted Sentiment: {mnb_pred}")
+    print(f"Logistic Regression Predicted Sentiment: {lr_pred}")
